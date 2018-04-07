@@ -1,12 +1,10 @@
-import MLExample.{df, toArray}
 import org.apache.spark.streaming.twitter.TwitterUtils
 import org.apache.spark.streaming._
 import org.apache.spark.SparkConf
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.{Word2Vec, Word2VecModel}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.classification.LogisticRegressionModel
+import org.apache.spark.ml.feature.Word2VecModel
 import org.apache.spark.sql.{Row, SparkSession, functions}
-import org.apache.spark.streaming.dstream.DStream
+
 
 object Main extends App {
   val conf = new SparkConf().setMaster("local[2]").setAppName("Spark CSV Reader")
@@ -35,7 +33,14 @@ object Main extends App {
     val spark = SparkSession.builder.config(rdd.sparkContext.getConf).getOrCreate()
     import spark.implicits._
 
-    val toArray = functions.udf[Array[String], String](_.split(" "))
+    val toArray = functions.udf[Array[String], String](_.split(" ")
+      .filter(_.length > 2)
+      .filter(!_.startsWith("@"))
+      .map(str => str
+        .replaceAll("[^A-Za-z0-9]", "")
+        .toLowerCase()
+      )
+    )
 
     // Convert RDD[String] to DataFrame
     val wordsDataFrame = rdd.toDF("createdAt", "text")

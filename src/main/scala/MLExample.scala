@@ -3,8 +3,6 @@ import org.apache.spark.ml.feature.Word2Vec
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, functions}
-import org.apache.spark.streaming.twitter.TwitterUtils
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 
 object MLExample extends App {
@@ -27,12 +25,21 @@ object MLExample extends App {
     .load("testdata.manual.2009.06.14.csv")
 //    .load("training.1600000.processed.noemoticon.csv")
 
-  val toArray = functions.udf[Array[String], String](_.split(" "))
+  val toArray = functions.udf[Array[String], String](_.split(" ")
+    .filter(_.length > 2)
+    .filter(!_.startsWith("@"))
+    .map(str => str
+      .replaceAll("[^A-Za-z0-9]", "")
+      .toLowerCase()
+    )
+  )
 
   val needed_df = df
     .drop("id", "date", "query", "user")
     .filter(df("label") =!= 2)
     .withColumn("array", toArray(df("text")))
+
+//  needed_df.select("array").show(100, false)
 
   val word2Vec = new Word2Vec()
     .setInputCol("array")
@@ -44,8 +51,6 @@ object MLExample extends App {
   val w2vModel = word2Vec.fit(needed_df)
 
   val result = w2vModel.transform(needed_df)
-
-  w2vModel.save("Word2Vec")
 
   val Array(train, test) = result.randomSplit(Array(0.8, 0.2), 42)
 
@@ -60,7 +65,9 @@ object MLExample extends App {
       if (prediction == label) 1 else 0
     }.sum
 
+  println(1.0 * counter / test.count())
+
+  w2vModel.save("Word2Vec")
   lrModel.save("LogisticRegression")
 
-  println(1.0 * counter / test.count())
 }
