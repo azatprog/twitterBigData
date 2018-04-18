@@ -10,11 +10,6 @@ object Main extends App {
   val conf = new SparkConf().setMaster("local[2]").setAppName("Spark CSV Reader")
   val ssc = new StreamingContext(conf, Seconds(15))
 
-  //  val sc = org.apache.spark.sql.SparkSession.builder
-  //    .master("local")
-  //    .appName("Spark CSV Reader")
-  //    .getOrCreate
-
   val w2vModel = Word2VecModel.load("Word2Vec")
   val lrModel = LogisticRegressionModel.load("LogisticRegression")
 
