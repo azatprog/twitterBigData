@@ -1,12 +1,8 @@
-import MLExample.trainW2V
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.Word2Vec
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, SparkSession, functions}
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.sql.{Row, functions}
 
 
 object MLExample extends App {
@@ -33,7 +29,6 @@ object MLExample extends App {
         StructField("user", StringType, nullable = false),
         StructField("text", StringType, nullable = false)
       )))
-      //    .load("testdata.manual.2009.06.14.csv")
       .load(file)
       .drop("id", "date", "query", "user")
       .filter("label <> 2")
@@ -44,10 +39,17 @@ object MLExample extends App {
     .appName("Spark CSV Reader")
     .getOrCreate
 
-  var trainTweets = readCSV(spark, "training.1600000.processed.noemoticon.csv")
-  trainTweets = trainTweets.withColumn("array", toArray(trainTweets("text")))
+  /*
 
-  var testTweets = readCSV(spark, "testdata.manual.2009.06.14.csv")
+  testdata.manual.2009.06.14.csv
+   */
+
+  //  var trainTweets = readCSV(spark, "training.1600000.processed.noemoticon.csv")
+  //  var testTweets = readCSV(spark, "testdata.manual.2009.06.14.csv")
+
+  var Array(trainTweets, testTweets) = readCSV(spark, "testdata.manual.2009.06.14.csv").randomSplit(Array(0.8, 0.2), 123)
+
+  trainTweets = trainTweets.withColumn("array", toArray(trainTweets("text")))
   testTweets = testTweets.withColumn("array", toArray(testTweets("text")))
 
   val w2vModel = new Word2Vec()

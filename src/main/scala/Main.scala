@@ -1,3 +1,9 @@
+import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.ws.Message
+import akka.http.scaladsl.server.Directives.{handleWebSocketMessages, path}
+import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import org.apache.spark.streaming.twitter.TwitterUtils
 import org.apache.spark.streaming._
 import org.apache.spark.SparkConf
@@ -5,8 +11,44 @@ import org.apache.spark.ml.classification.LogisticRegressionModel
 import org.apache.spark.ml.feature.Word2VecModel
 import org.apache.spark.sql.{Row, SparkSession, functions}
 
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props, Terminated}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.ws._
+import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.scaladsl._
+import akka.http.scaladsl.server.Directives._
+
+import scala.io.StdIn
+
 
 object Main extends App {
+  implicit val system = ActorSystem("example")
+  implicit val materializer = ActorMaterializer()
+
+  var clients = List[ActorRef]()
+
+  def flow: Flow[Message, Message, Any] = {
+    val client = system.actorOf(Props(classOf[ClientConnectionActor]))
+    clients = client :: clients
+    val in = Sink.actorRef(client, 'sinkclose)
+    val out = Source.actorRef(8, OverflowStrategy.fail).mapMaterializedValue { a =>
+      client ! ('income -> a)
+      a
+    }
+    Flow.fromSinkAndSource(in, out)
+  }
+
+  val route = path("ws")(handleWebSocketMessages(flow))
+  val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
+
+  println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
+  StdIn.readLine()
+
+  import system.dispatcher
+  bindingFuture
+    .flatMap(_.unbind())
+    .onComplete(_ => system.terminate())
+
   val conf = new SparkConf().setMaster("local[2]").setAppName("Spark CSV Reader")
   val ssc = new StreamingContext(conf, Seconds(15))
 
@@ -19,7 +61,6 @@ object Main extends App {
   val stream = TwitterUtils.createStream(ssc, None)
   val twits = stream.window(Seconds(60)).map(m =>
     Tweet(m.getCreatedAt().getTime() / 1000, m.getText)
-    //    Tweet(1, "love good happy")
   )
 
 
@@ -46,10 +87,28 @@ object Main extends App {
       .select("text", "prediction")
       .collect()
       .foreach { case Row(text: String, prediction: Double) =>
-        println("blablablah", text, prediction)
+        clients.foreach(_ ! ('tweet -> text -> prediction))
       }
 
   }
     ssc.start()
     ssc.awaitTermination()
+}
+
+
+class ClientConnectionActor extends Actor {
+  var connection: Option[ActorRef] = None
+
+  val receive: Receive = {
+    case ('income, a: ActorRef) => connection = Some(a); context.watch(a); connection.get ! TextMessage.Strict("Hello there!")
+    case Terminated(a) if connection.contains(a) => connection = None; context.stop(self)
+    case 'sinkclose => context.stop(self)
+
+    case ('tweet, text, prediction) => connection.foreach(_ ! TextMessage.Strict(s"$prediction $text"))
+
+    case TextMessage.Strict(t) => connection.foreach(_ ! TextMessage.Strict(s"echo $t"))
+    case _ => // ingone
+  }
+
+  override def postStop(): Unit = connection.foreach(context.stop)
 }
