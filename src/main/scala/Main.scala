@@ -48,7 +48,7 @@ object Main extends App {
   //  val ssc = new StreamingContext(sc, Seconds(15))
   case class Tweet(createdAt: Long, text: String)
 
-  val stream = TwitterUtils.createStream(ssc, None)
+  val stream = TwitterUtils.createStream(ssc, None, Array("USA", "Trump"))
   val twits = stream.window(Seconds(60)).map(m =>
     Tweet(m.getCreatedAt().getTime() / 1000, m.getText)
   )
@@ -77,7 +77,8 @@ object Main extends App {
       .select("text", "prediction")
       .collect()
       .foreach { case Row(text: String, prediction: Double) =>
-        clients.foreach(_ ! ('tweet -> text -> prediction))
+        println("blablablah", text, prediction)
+        clients.foreach(_ ! ('tweet -> (text -> prediction)))
       }
 
   }
@@ -98,9 +99,12 @@ class ClientConnectionActor extends Actor {
     case Terminated(a) if connection.contains(a) => connection = None; context.stop(self)
     case 'sinkclose => context.stop(self)
 
-    case ('tweet, text, prediction) => connection.foreach(_ ! TextMessage.Strict(
-      s"{'prediction':$prediction, 'text':'$text'}"
-    ))
+    case ('tweet, (text, prediction)) => {
+      println("from actor...", text)
+      connection.foreach(_ ! TextMessage.Strict(
+        "{\"prediction\":" + prediction.toString + ",\"text\":\"" + text + "\"}"
+      ))
+    }
 
     case TextMessage.Strict(t) => connection.foreach(_ ! TextMessage.Strict(s"echo $t"))
     case _ => // ingone
