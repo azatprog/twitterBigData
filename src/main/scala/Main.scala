@@ -1,22 +1,15 @@
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.Message
-import akka.http.scaladsl.server.Directives.{handleWebSocketMessages, path}
-import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.http.scaladsl.model.ws.{Message, _}
+import akka.http.scaladsl.server.Directives.{handleWebSocketMessages, path, _}
 import akka.stream.scaladsl.{Flow, Sink, Source}
-import org.apache.spark.streaming.twitter.TwitterUtils
-import org.apache.spark.streaming._
+import akka.stream.{ActorMaterializer, OverflowStrategy}
 import org.apache.spark.SparkConf
 import org.apache.spark.ml.classification.LogisticRegressionModel
 import org.apache.spark.ml.feature.Word2VecModel
 import org.apache.spark.sql.{Row, SparkSession, functions}
-
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props, Terminated}
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws._
-import akka.stream.{ActorMaterializer, OverflowStrategy}
-import akka.stream.scaladsl._
-import akka.http.scaladsl.server.Directives._
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.twitter.TwitterUtils
 
 import scala.io.StdIn
 
@@ -39,15 +32,12 @@ object Main extends App {
   }
 
   val route = path("ws")(handleWebSocketMessages(flow))
-  val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
+  val bindingFuture = Http().bindAndHandle(route, "localhost", 8789)
 
   println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
   StdIn.readLine()
 
   import system.dispatcher
-  bindingFuture
-    .flatMap(_.unbind())
-    .onComplete(_ => system.terminate())
 
   val conf = new SparkConf().setMaster("local[2]").setAppName("Spark CSV Reader")
   val ssc = new StreamingContext(conf, Seconds(15))
@@ -91,8 +81,12 @@ object Main extends App {
       }
 
   }
-    ssc.start()
-    ssc.awaitTermination()
+  ssc.start()
+  ssc.awaitTermination()
+
+//  bindingFuture
+//    .flatMap(_.unbind())
+//    .onComplete(_ => system.terminate())
 }
 
 
@@ -104,7 +98,9 @@ class ClientConnectionActor extends Actor {
     case Terminated(a) if connection.contains(a) => connection = None; context.stop(self)
     case 'sinkclose => context.stop(self)
 
-    case ('tweet, text, prediction) => connection.foreach(_ ! TextMessage.Strict(s"$prediction $text"))
+    case ('tweet, text, prediction) => connection.foreach(_ ! TextMessage.Strict(
+      s"{'prediction':$prediction, 'text':'$text'}"
+    ))
 
     case TextMessage.Strict(t) => connection.foreach(_ ! TextMessage.Strict(s"echo $t"))
     case _ => // ingone

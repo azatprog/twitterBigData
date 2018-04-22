@@ -1,13 +1,15 @@
 (function() {
     console.log('starting..');
-    // const socket = io('http://10.240.21.141:3000');
+    const socket = new WebSocket('ws://localhost:8789/ws');
     // socket.emit('context');
-    // socket.on('reply', function (data) {
-    //     console.log(data);
-    // });
-    const tweetTable = document.getElementById('tweet-table');
-    console.log(tweetTable);
-    const row = tweetTable.insertRow(0);
-    row.insertCell(0).innerHTML = 'Tweet 2';
-    row.insertCell(1).innerHTML = 'value 2';
+    socket.onmessage = function (data) {
+        console.log(data);
+        const tweetTable = document.getElementById('tweet-table');
+        console.log(tweetTable);
+        const row = tweetTable.insertRow(0);
+        const parsedData = JSON.parse(data.data);
+        row.insertCell(0).innerHTML = parsedData['text'];
+        row.insertCell(1).innerHTML = parsedData['prediction'];
+    }
+
 })();
