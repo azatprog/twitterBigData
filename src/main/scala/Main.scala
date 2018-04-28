@@ -34,7 +34,7 @@ object Main extends App {
   val route = path("ws")(handleWebSocketMessages(flow))
   val bindingFuture = Http().bindAndHandle(route, "localhost", 8789)
 
-  println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
+  println(s"Server is listening to web-socket at ws://localhost:8789/ws\n Open frontent/index.html and press RETURN to continue...")
   StdIn.readLine()
 
   import system.dispatcher
@@ -42,8 +42,8 @@ object Main extends App {
   val conf = new SparkConf().setMaster("local[2]").setAppName("Spark CSV Reader")
   val ssc = new StreamingContext(conf, Seconds(15))
 
-  val w2vModel = Word2VecModel.load("Word2Vec")
-  val lrModel = LogisticRegressionModel.load("LogisticRegression")
+  val w2vModel = Word2VecModel.load("models/Word2Vec")
+  val lrModel = LogisticRegressionModel.load("models/LogisticRegression")
 
   //  val ssc = new StreamingContext(sc, Seconds(15))
   case class Tweet(createdAt: Long, text: String)

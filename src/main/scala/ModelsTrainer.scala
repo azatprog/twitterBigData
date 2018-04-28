@@ -5,7 +5,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 import org.apache.spark.sql.{Row, SparkSession, functions}
 
 
-object MLExample extends App {
+object ModelsTrainer extends App {
 
   def toArray = functions.udf[Array[String], String](_.split(" ")
     .filter(_.length > 2)
@@ -59,7 +59,7 @@ object MLExample extends App {
     .setMinCount(1)
     .setMaxIter(10)
     .fit(trainTweets)
-  w2vModel.write.overwrite().save("Word2Vec")
+  w2vModel.write.overwrite().save("models/Word2Vec")
 
   val trainW2V = w2vModel.transform(trainTweets)
   val testW2V = w2vModel.transform(testTweets)
@@ -68,7 +68,7 @@ object MLExample extends App {
     .setMaxIter(20)
     .setRegParam(0.01)
     .fit(trainW2V)
-  lrModel.write.overwrite().save("LogisticRegression")
+  lrModel.write.overwrite().save("models/LogisticRegression")
 
   var counter = lrModel.transform(testW2V)
     .select("features", "label", "probability", "prediction")
